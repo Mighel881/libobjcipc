@@ -68,6 +68,17 @@ static inline void socketServerCallback(CFSocketRef s, CFSocketCallBackType type
  	return original_BSAuditTokenTaskHasEntitlement(token, entitlement);
  }
 
+ static BOOL (*original_BSXPCConnectionHasEntitlement)(id connection, NSString *entitlement);
+ static inline BOOL replaced_BSXPCConnectionHasEntitlement(id connection, NSString *entitlement) {
+
+ 	if ([entitlement isEqualToString:@"com.apple.multitasking.unlimitedassertions"]) {
+ 		return YES;
+ 	}
+
+ 	return original_BSXPCConnectionHasEntitlement(token, entitlement);
+ }
+
+
 static OBJCIPC *sharedInstance = nil;
 
 @implementation OBJCIPC
@@ -78,7 +89,8 @@ static OBJCIPC *sharedInstance = nil;
  		// replace the function. testing if is iOS 8 by checking if it responds to iOS 8-only method
  		if ([[NSProcessInfo processInfo] respondsToSelector:@selector(operatingSystemVersion)]) {
  			MSHookFunction(((int *)MSFindSymbol(NULL, "_BSAuditTokenTaskHasEntitlement")), (int*)replaced_BSAuditTokenTaskHasEntitlement, (void**)&original_BSAuditTokenTaskHasEntitlement);
- 		}
+			MSHookFunction(((int *)MSFindSymbol(NULL, "_BSXPCConnectionHasEntitlement")), (int*)replaced_BSXPCConnectionHasEntitlement, (void**)&original_BSXPCConnectionHasEntitlement);
+		}
 	} else if ([self isBackBoard]) {
 
 		// load the library
