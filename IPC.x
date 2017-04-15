@@ -51,15 +51,14 @@
 %end
 
 static inline void socketServerCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef address, const void *data, void *info) {
-
-	if (type == kCFSocketAcceptCallBack) {
-
-		// cast data to socket native handle
-		CFSocketNativeHandle nativeSocketHandle = *(CFSocketNativeHandle *)data;
-
-		// create pair with incoming socket handle
-		[[OBJCIPC sharedInstance] _createPairWithAppSocket:nativeSocketHandle];
+	if (type != kCFSocketAcceptCallBack) {
+		return;
 	}
+	// cast data to socket native handle
+	CFSocketNativeHandle nativeSocketHandle = *(CFSocketNativeHandle *)data;
+
+	// create pair with incoming socket handle
+	[[OBJCIPC sharedInstance] _createPairWithAppSocket:nativeSocketHandle];
 }
 
 static OBJCIPC *sharedInstance = nil;
@@ -67,6 +66,7 @@ static OBJCIPC *sharedInstance = nil;
 @implementation OBJCIPC
 
 + (void)load {
+	//TODO: maybe split hooks into separate projects
 	if ([self isAssertiond]) {
 		// replace the function. testing if is iOS 8 by checking if it responds to iOS 8-only method
 		if (IS_IOS_OR_NEWER(iOS_9_0)) {
@@ -79,15 +79,13 @@ static OBJCIPC *sharedInstance = nil;
 	} else if ([self isBackBoard]) {
 
 		// load the library
-		dlopen("/System/Library/PrivateFrameworks/XPCObjects.framework/XPCObjects", RTLD_LAZY);
+		dlopen(XPCObjects, RTLD_LAZY);
 		// replace the function
 		void *XPCConnectionHasEntitlement = MSFindSymbol(NULL, "_XPCConnectionHasEntitlement");
 		%init(iOS7);
 	} else if ([self isSpringBoard]) {
-
 		// activate OBJCIPC automatically in SpringBoard
 		[self activate];
-
 	} else if ([self isApp]) {
 		// the notification sent from SpringBoard will activate OBJCIPC in the running
 		// and active app with the specified bundle identifier automatically
@@ -114,15 +112,7 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 + (BOOL)isSpringBoard {
-	static BOOL queried = NO;
-	static BOOL result = NO;
-
-	if (!queried) {
-		queried = YES;
-		result = %c(SpringBoard) != nil;
-	}
-
-	return result;
+	return IN_SPRINGBOARD;
 }
 
 + (BOOL)isBackBoard {
@@ -131,14 +121,14 @@ static OBJCIPC *sharedInstance = nil;
 
 	if (!queried) {
 		queried = YES;
-		result = [[[NSBundle mainBundle] bundleIdentifier] isEqualToString:@"com.apple.backboardd"];
+		result = [[NSBundle mainBundle].bundleIdentifier isEqualToString:@"com.apple.backboardd"];
 	}
 
 	return result;
 }
 
 + (BOOL)isApp {
-	return ![self isSpringBoard] && ![self isBackBoard] && [[NSBundle mainBundle] bundleIdentifier];
+	return ![self isSpringBoard] && ![self isBackBoard] && [NSBundle mainBundle].bundleIdentifier;
 }
 
 + (instancetype)sharedInstance {
@@ -152,7 +142,7 @@ static OBJCIPC *sharedInstance = nil;
 
 + (id)allocWithZone:(NSZone *)zone {
 	@synchronized(self) {
-		if (sharedInstance == nil) {
+		if (!sharedInstance) {
 			sharedInstance = [super allocWithZone:zone];
 			return sharedInstance;
 		}
@@ -168,7 +158,6 @@ static OBJCIPC *sharedInstance = nil;
 	IPCLOG(@"Activating OBJCIPC");
 
 	if ([self isSpringBoard]) {
-
 		// create socket server in SpringBoard
 		ipc.serverPort = [ipc _createSocketServer];
 
@@ -181,7 +170,6 @@ static OBJCIPC *sharedInstance = nil;
 		[pref writeToFile:PrefPath atomically:YES];
 
 	} else if ([self isApp]) {
-
 		// register event handlers
 		[[NSNotificationCenter defaultCenter] addObserver:ipc selector:@selector(_deactivateApp) name:UIApplicationWillTerminateNotification object:nil]; // close connection whenever the app is terminated (to notify SpringBoard)
 

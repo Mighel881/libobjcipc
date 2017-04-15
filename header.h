@@ -7,11 +7,12 @@
 	#define IPCLOG(x,...) [NSString stringWithFormat:(x), ##__VA_ARGS__]
 #endif
 
-#define PrefPath @"/var/mobile/Library/Preferences/libobjcipc.plist"
 #define XPCObjects "/System/Library/PrivateFrameworks/XPCObjects.framework/XPCObjects"
-#define SpringBoardIdentifier @"com.apple.springboard"
-#define OBJCIPCActivateAppNotification @"OBJCIPCActivateAppNotification"
-#define OBJCIPCDeactivateAppNotification @"OBJCIPCDeactivateAppNotification"
+
+static NSString * const PrefPath = @"/var/mobile/Library/Preferences/libobjcipc.plist";
+static NSString * const SpringBoardIdentifier = @"com.apple.springboard";
+static NSString * const OBJCIPCActivateAppNotification = @"OBJCIPCActivateAppNotification";
+static NSString * const OBJCIPCDeactivateAppNotification = @"OBJCIPCDeactivateAppNotification";
 
 @class OBJCIPC, OBJCIPCConnection, OBJCIPCMessage;
 
