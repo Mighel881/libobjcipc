@@ -9,19 +9,18 @@
 #import "header.h"
 
 @interface OBJCIPC : NSObject {
-	
 	BOOL _activated;
-	
+
 	// SpringBoard server port
 	NSUInteger _serverPort;
-	
+
 	// process assertions
 	NSMutableDictionary *_processAssertions;
-	
+
 	// store active connections (each contains its own streams)
 	NSMutableSet *_pendingConnections;
 	NSMutableDictionary *_activeConnections;
-	
+
 	// message handlers and queues
 	NSMutableDictionary *_globalIncomingMessageHandlers;
 	NSMutableDictionary *_incomingMessageHandlers;

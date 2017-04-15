@@ -1,7 +1,7 @@
 #define LOG_MESSAGE_BODY 0
 
 #ifdef DEBUG
-	#define IPCLOG(x,...) NSLog(@"*** libobjcipc: %@",[NSString stringWithFormat:(x), ##__VA_ARGS__])
+	#define IPCLOG(x,...) HBLogDebug(@"*** libobjcipc: %@",[NSString stringWithFormat:(x), ##__VA_ARGS__])
 #else
 	// Replace with call to [NSString stringWithFormat:] so that any variables passed aren't marked as unused.
 	#define IPCLOG(x,...) [NSString stringWithFormat:(x), ##__VA_ARGS__]
@@ -19,11 +19,9 @@ typedef NSDictionary *(^OBJCIPCIncomingMessageHandler)(NSDictionary *); // retur
 typedef void(^OBJCIPCReplyHandler)(NSDictionary *);
 
 typedef struct {
-	
 	char magicNumber[3];
 	BOOL replyFlag;
 	char messageIdentifier[5];
 	char messageName[256];
 	int contentLength;
-	
 } OBJCIPCMessageHeader;

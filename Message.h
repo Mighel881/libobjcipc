@@ -9,7 +9,6 @@
 #import "header.h"
 
 @interface OBJCIPCMessage : NSObject {
-	
 	BOOL _isReply;
 	NSString *_messageIdentifier;
 	OBJCIPCReplyHandler _replyHandler;

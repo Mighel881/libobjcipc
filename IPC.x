@@ -11,7 +11,6 @@
 #import <sys/socket.h>
 #import <netinet/in.h>
 #import <arpa/inet.h>
-#import <xpc/xpc.h>
 #import "dlfcn.h"
 #import "substrate.h"
 #import "interface.h"
@@ -20,21 +19,36 @@
 #import "Connection.h"
 #import "Message.h"
 
-// to enable process assertions in SpringBoard
-static BOOL (*orignal_XPCConnectionHasEntitlement)(xpc_connection_t connection, NSString *entitlement);
-static inline BOOL replaced_XPCConnectionHasEntitlement(xpc_connection_t connection, NSString *entitlement) {
-
-	IPCLOG(@"_XPCConnectionHasEntitlement <entitlement: %@>", entitlement);
-
+%group iOS7
+%hookf(int, XPCConnectionHasEntitlement, id connection, NSString *entitlement) {
+	// to enable process assertions in SpringBoard
 	if ([entitlement isEqualToString:@"com.apple.multitasking.unlimitedassertions"]) {
-
-		// override the original result
-		if (xpc_connection_get_pid(connection) == pidForProcess(@"SpringBoard"))
-			return YES;
+		return true;
 	}
 
-	return orignal_XPCConnectionHasEntitlement(connection, entitlement);
+	return %orig;
 }
+%end
+
+%group iOS8
+%hookf(int, BSAuditTokenTaskHasEntitlement, id connection, NSString *entitlement) {
+	if ([entitlement isEqualToString:@"com.apple.multitasking.unlimitedassertions"]) {
+		return true;
+	}
+
+	return %orig;
+}
+%end
+
+%group iOS9andUp
+%hookf(int, BSXPCConnectionHasEntitlement, id connection, NSString *entitlement) {
+	if ([entitlement isEqualToString:@"com.apple.multitasking.unlimitedassertions"]) {
+		return true;
+	}
+
+	return %orig;
+}
+%end
 
 static inline void socketServerCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef address, const void *data, void *info) {
 
@@ -48,63 +62,33 @@ static inline void socketServerCallback(CFSocketRef s, CFSocketCallBackType type
 	}
 }
 
-@interface BSAuditToken : NSObject
- - (int)pid;
- @end
-
- // I don't think the first arugment even is a BSAuditToken, leaving it as a
- //TODO: find actual function parameters to check if SpringBoard is requesting or some other proc
- static BOOL (*original_BSAuditTokenTaskHasEntitlement)(BSAuditToken *token, NSString *entitlement);
- static inline BOOL replaced_BSAuditTokenTaskHasEntitlement(BSAuditToken *token, NSString *entitlement) {
-
- 	if ([entitlement isEqualToString:@"com.apple.multitasking.unlimitedassertions"]) {
-
- 		// override the original result
- 		// as mentioned, trying to access the first parameter crashes the device, and since it's happening on assertiond, it'll look like a bootloop. we could've used [token pid] == pidForProcess... or [token bundleIdentifier]
-
- 		return YES;
- 	}
-
- 	return original_BSAuditTokenTaskHasEntitlement(token, entitlement);
- }
-
- static BOOL (*original_BSXPCConnectionHasEntitlement)(id connection, NSString *entitlement);
- static inline BOOL replaced_BSXPCConnectionHasEntitlement(id connection, NSString *entitlement) {
-
- 	if ([entitlement isEqualToString:@"com.apple.multitasking.unlimitedassertions"]) {
- 		return YES;
- 	}
-
- 	return original_BSXPCConnectionHasEntitlement(token, entitlement);
- }
-
-
 static OBJCIPC *sharedInstance = nil;
 
 @implementation OBJCIPC
 
 + (void)load {
-
 	if ([self isAssertiond]) {
- 		// replace the function. testing if is iOS 8 by checking if it responds to iOS 8-only method
- 		if ([[NSProcessInfo processInfo] respondsToSelector:@selector(operatingSystemVersion)]) {
- 			MSHookFunction(((int *)MSFindSymbol(NULL, "_BSAuditTokenTaskHasEntitlement")), (int*)replaced_BSAuditTokenTaskHasEntitlement, (void**)&original_BSAuditTokenTaskHasEntitlement);
-			MSHookFunction(((int *)MSFindSymbol(NULL, "_BSXPCConnectionHasEntitlement")), (int*)replaced_BSXPCConnectionHasEntitlement, (void**)&original_BSXPCConnectionHasEntitlement);
+		// replace the function. testing if is iOS 8 by checking if it responds to iOS 8-only method
+		if (IS_IOS_OR_NEWER(iOS_9_0)) {
+			void *BSXPCConnectionHasEntitlement = MSFindSymbol(NULL, "_BSXPCConnectionHasEntitlement");
+			%init(iOS9andUp);
+		} else {
+			void *BSAuditTokenTaskHasEntitlement = MSFindSymbol(NULL, "_BSAuditTokenTaskHasEntitlement");
+			%init(iOS8);
 		}
 	} else if ([self isBackBoard]) {
 
 		// load the library
-		dlopen(XPCObjects, RTLD_LAZY);
+		dlopen("/System/Library/PrivateFrameworks/XPCObjects.framework/XPCObjects", RTLD_LAZY);
 		// replace the function
-		MSHookFunction(((int *)MSFindSymbol(NULL, "_XPCConnectionHasEntitlement")), (int *)replaced_XPCConnectionHasEntitlement, (void **)&orignal_XPCConnectionHasEntitlement);
-
+		void *XPCConnectionHasEntitlement = MSFindSymbol(NULL, "_XPCConnectionHasEntitlement");
+		%init(iOS7);
 	} else if ([self isSpringBoard]) {
 
 		// activate OBJCIPC automatically in SpringBoard
 		[self activate];
 
 	} else if ([self isApp]) {
-
 		// the notification sent from SpringBoard will activate OBJCIPC in the running
 		// and active app with the specified bundle identifier automatically
 		[self _setupAppActivationListener];
@@ -113,38 +97,35 @@ static OBJCIPC *sharedInstance = nil;
 		// and active app with the specified bundle identifier automatically
 		[self _setupAppDeactivationListener];
 	} else {
-		// Daemon or other process with no bundle identifier.
+		return;
 	}
 }
 
 + (BOOL)isAssertiond {
-
- 	static BOOL queried = NO;
- 	static BOOL result = NO;
-
- 	if (!queried) {
- 		queried = YES;
- 		result = [[NSProcessInfo processInfo].processName isEqualToString:@"assertiond"];
- 	}
-
- 	return result;
- }
-
-+ (BOOL)isSpringBoard {
-
 	static BOOL queried = NO;
 	static BOOL result = NO;
 
 	if (!queried) {
 		queried = YES;
-		result = objc_getClass("SpringBoard") != nil;
+		result = [[NSProcessInfo processInfo].processName isEqualToString:@"assertiond"];
+	}
+
+	return result;
+}
+
++ (BOOL)isSpringBoard {
+	static BOOL queried = NO;
+	static BOOL result = NO;
+
+	if (!queried) {
+		queried = YES;
+		result = %c(SpringBoard) != nil;
 	}
 
 	return result;
 }
 
 + (BOOL)isBackBoard {
-
 	static BOOL queried = NO;
 	static BOOL result = NO;
 
@@ -161,17 +142,15 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 + (instancetype)sharedInstance {
-
-	@synchronized(self) {
-		if (sharedInstance == nil)
-			[self new];
-	}
-
+	static OBJCIPC *sharedInstance = nil;
+	static dispatch_once_t onceToken;
+	dispatch_once(&onceToken, ^{
+	    sharedInstance = [OBJCIPC new];
+	});
 	return sharedInstance;
 }
 
 + (id)allocWithZone:(NSZone *)zone {
-
 	@synchronized(self) {
 		if (sharedInstance == nil) {
 			sharedInstance = [super allocWithZone:zone];
@@ -183,7 +162,6 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 + (void)activate {
-
 	OBJCIPC *ipc = [self sharedInstance];
 	if (ipc.activated) return; // only activate once
 
@@ -196,7 +174,9 @@ static OBJCIPC *sharedInstance = nil;
 
 		// write the server port to preference file
 		NSMutableDictionary *pref = [NSMutableDictionary dictionaryWithContentsOfFile:PrefPath];
-		if (pref == nil) pref = [NSMutableDictionary dictionary];
+		if (!pref) {
+			pref = [NSMutableDictionary dictionary];
+		}
 		pref[@"serverPort"] = @(ipc.serverPort);
 		[pref writeToFile:PrefPath atomically:YES];
 
@@ -209,7 +189,7 @@ static OBJCIPC *sharedInstance = nil;
 		NSDictionary *pref = [NSDictionary dictionaryWithContentsOfFile:PrefPath];
 		NSNumber *port = pref[@"serverPort"];
 
-		if (port == nil) {
+		if (!port) {
 			IPCLOG(@"Unable to retrieve server port from preference file");
 			return;
 		}
@@ -227,14 +207,15 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 + (void)deactivate {
-
 	if (![self isApp]) {
 		IPCLOG(@"You can only deactivate OBJCIPC in app");
 		return;
 	}
 
 	OBJCIPC *ipc = [self sharedInstance];
-	if (!ipc.activated) return; // not activated yet
+	if (!ipc.activated) {
+		return; // not activated yet
+	}
 
 	IPCLOG(@"Deactivating OBJCIPC");
 
@@ -269,7 +250,6 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 + (BOOL)launchAppWithIdentifier:(NSString *)identifier stayInBackground:(BOOL)stayInBackground {
-
 	if (![self isSpringBoard]) {
 		IPCLOG(@"You can only launch app in SpringBoard");
 		return NO;
@@ -280,15 +260,15 @@ static OBJCIPC *sharedInstance = nil;
 	// launch the app
 	SpringBoard *app = (SpringBoard *)[UIApplication sharedApplication];
 
-	SBApplicationController *controller = [objc_getClass("SBApplicationController") sharedInstance];
+	SBApplicationController *controller = [%c(SBApplicationController) sharedInstance];
 	SBApplication *application = nil;
- 	if ([controller respondsToSelector:@selector(applicationWithBundleIdentifier:)]) {
- 		application = [controller applicationWithBundleIdentifier:identifier];
- 	} else {
- 		application = [controller applicationWithDisplayIdentifier:identifier];
- 	}
+	if ([controller respondsToSelector:@selector(applicationWithBundleIdentifier:)]) {
+		application = [controller applicationWithBundleIdentifier:identifier];
+	} else {
+		application = [controller applicationWithDisplayIdentifier:identifier];
+	}
 
-	if (application == nil) {
+	if (!application) {
 		IPCLOG(@"App with identifier <%@> cannot be found", identifier);
 		return NO;
 	}
@@ -326,13 +306,12 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 + (BOOL)setAppWithIdentifier:(NSString *)identifier inBackground:(BOOL)inBackground {
-
 	if (![self isSpringBoard]) {
 		IPCLOG(@"You can only set app in background in SpringBoard");
 		return NO;
 	}
 
-	if (identifier == nil) {
+	if (!identifier) {
 		IPCLOG(@"App identifier cannot be nil when setting app in background");
 		return NO;
 	}
@@ -341,7 +320,7 @@ static OBJCIPC *sharedInstance = nil;
 
 	OBJCIPC *ipc = [self sharedInstance];
 
-	if (ipc.processAssertions == nil) {
+	if (!ipc.processAssertions) {
 		ipc.processAssertions = [NSMutableDictionary dictionary];
 	}
 
@@ -349,37 +328,36 @@ static OBJCIPC *sharedInstance = nil;
 
 	// setup process assertion
 	if (inBackground) {
-
 		BKSProcessAssertion *currentAssertion = processAssertions[identifier];
-		if (currentAssertion != nil && currentAssertion.valid) return YES;
-
+		if (currentAssertion && currentAssertion.valid) {
+			return YES;
+		}
 		// remove the previous assertion (maybe it is now invalid)
 		[processAssertions removeObjectForKey:identifier];
 
 		// set the flags
-		ProcessAssertionFlags flags = ProcessAssertionFlagPreventSuspend | ProcessAssertionFlagPreventThrottleDownCPU | ProcessAssertionFlagAllowIdleSleep | ProcessAssertionFlagWantsForegroundResourcePriority;
+		ProcessAssertionFlags flags = BKSProcessAssertionFlagPreventSuspend | BKSProcessAssertionFlagPreventThrottleDownCPU | BKSProcessAssertionFlagAllowIdleSleep | BKSProcessAssertionFlagWantsForegroundResourcePriority;
 
 		// create a new process assertion
-		BKSProcessAssertion *processAssertion = [[objc_getClass("BKSProcessAssertion") alloc] initWithBundleIdentifier:identifier flags:flags reason:kProcessAssertionReasonBackgroundUI name:identifier withHandler:^(BOOL valid) {
+		BKSProcessAssertion *processAssertion = [[%c(BKSProcessAssertion) alloc] initWithBundleIdentifier:identifier flags:flags reason:BKSProcessAssertionReasonBackgroundUI name:identifier withHandler:^(BOOL valid) {
 
 			if (!valid) {
-
 				// unable to create process assertion
 				// one of the reasons is that the app with specified bundle identifier does not exist
 				IPCLOG(@"Process assertion is invalid");
 
 				// remove active connection, if any
 				OBJCIPCConnection *activeConnection = [ipc activeConnectionWithAppWithIdentifier:identifier];
-				if (activeConnection != nil) {
+				if (activeConnection) {
 					[ipc removeConnection:activeConnection];
 				}
 
 				// send nil replies to all handler
 				NSArray *queuedMessages = ipc.outgoingMessageQueue[identifier];
-				if (queuedMessages != nil) {
+				if (queuedMessages) {
 					for (OBJCIPCMessage *message in queuedMessages) {
 						OBJCIPCReplyHandler handler = message.replyHandler;
-						if (handler != nil) {
+						if (handler) {
 							// ensure the handler is executed on main thread
 							if (![NSThread isMainThread]) {
 								dispatch_sync(dispatch_get_main_queue(), ^{
@@ -402,19 +380,18 @@ static OBJCIPC *sharedInstance = nil;
 		IPCLOG(@"objcipc: Created process assertion: %@", processAssertion);
 
 	} else {
-
 		// keep a copy before the connection is released
 		NSString *appIdentifier = [identifier copy];
 
 		// close connection with the app
 		OBJCIPCConnection *connection = ipc.activeConnections[identifier];
-		if (connection != nil) {
+		if (connection) {
 			[ipc removeConnection:connection];
 		}
 
 		BKSProcessAssertion *processAssertion = processAssertions[appIdentifier];
 
-		if (processAssertion != nil) {
+		if (processAssertion) {
 			IPCLOG(@"objcipc: Invalidate process assertion: %@", processAssertion);
 			// invalidate the assertion
 			[processAssertion invalidate];
@@ -429,7 +406,6 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 + (BOOL)sendMessageToAppWithIdentifier:(NSString *)identifier messageName:(NSString *)messageName dictionary:(NSDictionary *)dictionary replyHandler:(OBJCIPCReplyHandler)handler {
-
 	IPCLOG(@"Current thread: %@ <is main thread: %d>", [NSThread currentThread], (int)[NSThread isMainThread]);
 
 	if (![NSThread isMainThread]) {
@@ -442,18 +418,17 @@ static OBJCIPC *sharedInstance = nil;
 		return NO;
 	}
 
-	if (identifier == nil) {
+	if (!identifier) {
 		IPCLOG(@"App identifier cannot be nil");
 		return NO;
 	}
 
-	if (messageName == nil) {
+	if (!messageName) {
 		IPCLOG(@"Message name cannot be nil");
 		return NO;
 	}
 
 	if ([self isSpringBoard]) {
-
 		// launch the app if needed
 		// and make sure the app stay in background
 		BOOL success = [self launchAppWithIdentifier:identifier stayInBackground:YES];
@@ -466,7 +441,6 @@ static OBJCIPC *sharedInstance = nil;
 		[self _sendActivationNotificationToAppWithIdentifier:identifier];
 
 	} else {
-
 		// activate OBJCIPC in app
 		// OBJCIPC will be activated in app automatically when a message is sent from the app to SpringBoard
 		[self activate];
@@ -485,7 +459,6 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 + (BOOL)sendMessageToSpringBoardWithMessageName:(NSString *)messageName dictionary:(NSDictionary *)dictionary replyHandler:(OBJCIPCReplyHandler)replyHandler {
-
 	if (![self isApp]) {
 		IPCLOG(@"You must send messages to SpringBoard in app");
 		return NO;
@@ -495,7 +468,6 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 + (NSDictionary *)sendMessageToAppWithIdentifier:(NSString *)identifier messageName:(NSString *)messageName dictionary:(NSDictionary *)dictionary {
-
 	__block BOOL received = NO;
 	__block NSDictionary *reply = nil;
 
@@ -504,8 +476,9 @@ static OBJCIPC *sharedInstance = nil;
 		reply = [dictionary copy]; // must keep a copy in stack
 	}];
 
-	if (!success) return nil;
-
+	if (!success) {
+		return nil;
+	}
 	// this loop is to wait until the reply arrives or the connection is closed (reply with nil value)
 	while (!received) {
 		CFRunLoopRunInMode(kCFRunLoopDefaultMode, 1.0, YES); // 1000 ms
@@ -515,7 +488,6 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 + (NSDictionary *)sendMessageToSpringBoardWithMessageName:(NSString *)messageName dictionary:(NSDictionary *)dictionary {
-
 	if (![self isApp]) {
 		IPCLOG(@"You must send messages to SpringBoard in app");
 		return nil;
@@ -533,8 +505,7 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 + (void)registerIncomingMessageHandlerForAppWithIdentifier:(NSString *)identifier andMessageName:(NSString *)messageName handler:(OBJCIPCIncomingMessageHandler)handler {
-
-	if (messageName == nil) {
+	if (!messageName) {
 		IPCLOG(@"Message name cannot be nil when setting incoming message handler");
 		return;
 	}
@@ -548,11 +519,11 @@ static OBJCIPC *sharedInstance = nil;
 	OBJCIPC *ipc = [self sharedInstance];
 	OBJCIPCConnection *connection = [ipc activeConnectionWithAppWithIdentifier:identifier];
 
-	if (ipc.incomingMessageHandlers == nil) {
+	if (!ipc.incomingMessageHandlers) {
 		ipc.incomingMessageHandlers = [NSMutableDictionary dictionary];
 	}
 
-	if (ipc.globalIncomingMessageHandlers == nil) {
+	if (!ipc.globalIncomingMessageHandlers) {
 		ipc.globalIncomingMessageHandlers = [NSMutableDictionary dictionary];
 	}
 
@@ -563,32 +534,27 @@ static OBJCIPC *sharedInstance = nil;
 	handler = [[handler copy] autorelease];
 
 	// save the handler
-	if (identifier == nil) {
-
-		if (handler != nil) {
+	if (!identifier) {
+		if (handler) {
 			globalIncomingMessageHandlers[messageName] = handler;
 		} else {
 			[globalIncomingMessageHandlers removeObjectForKey:messageName];
 		}
-
 	} else {
-
-		if (handler != nil) {
-
-			if (incomingMessageHandlers[identifier] == nil) {
+		if (handler) {
+			if (!incomingMessageHandlers[identifier]) {
 				incomingMessageHandlers[identifier] = [NSMutableDictionary dictionary];
 			}
 
 			NSMutableDictionary *incomingMessageHandlersForApp = incomingMessageHandlers[identifier];
 			incomingMessageHandlersForApp[messageName] = handler;
-
 		} else {
 			// remove handler for a specific app identifier and message name
 			NSMutableDictionary *incomingMessageHandlersForApp = incomingMessageHandlers[identifier];
 			[incomingMessageHandlersForApp removeObjectForKey:messageName];
 		}
 
-		if (connection != nil) {
+		if (connection) {
 			// update handler in the active connection
 			[connection setIncomingMessageHandler:handler forMessageName:messageName];
 		}
@@ -656,7 +622,9 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 - (void)addPendingConnection:(OBJCIPCConnection *)connection {
-	if (_pendingConnections == nil) _pendingConnections = [NSMutableSet new];
+	if (!_pendingConnections) {
+		_pendingConnections = [NSMutableSet new];
+	}
 	if (![_pendingConnections containsObject:connection]) {
 		[_pendingConnections addObject:connection];
 	}
@@ -665,20 +633,21 @@ static OBJCIPC *sharedInstance = nil;
 - (void)notifyConnectionBecomesActive:(OBJCIPCConnection *)connection {
 
 	NSString *appIdentifier = connection.appIdentifier;
-	if (appIdentifier == nil) {
+	if (!appIdentifier) {
 		IPCLOG(@"App identifier cannot be nil");
 		return;
 	}
 
-	if (_activeConnections[appIdentifier] != nil) {
+	if (_activeConnections[appIdentifier]) {
 		IPCLOG(@"The connection is already active");
 		return;
 	}
 
 	IPCLOG(@"Connection becomes active <%@>", connection);
 
-	if (_activeConnections == nil) _activeConnections = [NSMutableDictionary new];
-
+	if (!_activeConnections) {
+		_activeConnections = [NSMutableDictionary new];
+	}
 	// add it to the active connection list
 	_activeConnections[appIdentifier] = connection;
 
@@ -687,7 +656,7 @@ static OBJCIPC *sharedInstance = nil;
 
 	// set its incoming message handler
 	NSDictionary *handlers = _incomingMessageHandlers[appIdentifier];
-	if (handlers != nil) {
+	if (handlers) {
 		for (NSString *messageName in handlers) {
 			OBJCIPCIncomingMessageHandler handler = handlers[messageName];
 			[connection setIncomingMessageHandler:handler forMessageName:messageName];
@@ -696,8 +665,7 @@ static OBJCIPC *sharedInstance = nil;
 
 	// pass the queued messages to the active connection
 	NSArray *queuedMessages = _outgoingMessageQueue[appIdentifier];
-	if (queuedMessages != nil && [queuedMessages count] > 0) {
-
+	if (queuedMessages && [queuedMessages count] > 0) {
 		// pass the queued messages to the connection one by one
 		for (OBJCIPCMessage *message in queuedMessages) {
 			IPCLOG(@"Pass a queued message to the active connection <message: %@>", message);
@@ -711,11 +679,10 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 - (void)notifyConnectionIsClosed:(OBJCIPCConnection *)connection {
-
 	IPCLOG(@"Connection is closed <%@>", connection);
 
 	NSString *appIdentifier = connection.appIdentifier;
-	if (appIdentifier != nil && [self.class isSpringBoard]) {
+	if (appIdentifier && [self.class isSpringBoard]) {
 		// remove the app from background
 		// this will also call removeConnection
 		[self.class setAppWithIdentifier:appIdentifier inBackground:NO];
@@ -726,7 +693,6 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 - (void)removeConnection:(OBJCIPCConnection *)connection {
-
 	IPCLOG(@"Remove connection <%@>", connection);
 
 	if ([_pendingConnections containsObject:connection]) {
@@ -735,7 +701,7 @@ static OBJCIPC *sharedInstance = nil;
 	} else {
 		// remove it from the active connection list
 		NSString *identifier = connection.appIdentifier;
-		if (identifier != nil) {
+		if (identifier) {
 			IPCLOG(@"objcipc: Remove active connection <key: %@>", identifier);
 			[_activeConnections removeObjectForKey:identifier];
 		}
@@ -743,35 +709,31 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 - (void)queueOutgoingMessage:(OBJCIPCMessage *)message forAppWithIdentifier:(NSString *)identifier {
-
-	if (identifier == nil) {
+	if (!identifier) {
 		IPCLOG(@"App identifier cannot be nil");
 		return;
 	}
 
 	OBJCIPCConnection *activeConnection = [self activeConnectionWithAppWithIdentifier:identifier];
 
-	if (activeConnection == nil) {
-
-		if (_outgoingMessageQueue == nil) {
+	if (!activeConnection) {
+		if (!_outgoingMessageQueue) {
 			_outgoingMessageQueue = [NSMutableDictionary new];
 		}
-
 		// the connection with the app is not ready yet
 		// so queue it up first
 		NSMutableArray *existingQueue = _outgoingMessageQueue[identifier];
 
 		// create a new queue for the given app identifier if it does not exist
-		if (existingQueue == nil) existingQueue = [NSMutableArray array];
-
+		if (!existingQueue) {
+			existingQueue = [NSMutableArray array];
+		}
 		// queue up the new outgoing message
 		[existingQueue addObject:message];
 
 		// update the queue
 		_outgoingMessageQueue[identifier] = existingQueue;
-
 	} else {
-
 		// the connection with the app is ready
 		// redirect the message to the active connection
 		[activeConnection sendMessage:message];
@@ -779,7 +741,6 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 - (NSUInteger)_createSocketServer {
-
 	if (![self.class isSpringBoard]) {
 		IPCLOG(@"Socket server can only be created in SpringBoard");
 		return 0;
@@ -788,7 +749,7 @@ static OBJCIPC *sharedInstance = nil;
 	// create socket server
 	CFSocketRef socket = CFSocketCreate(NULL, AF_INET, SOCK_STREAM, IPPROTO_TCP, kCFSocketAcceptCallBack, &socketServerCallback, NULL);
 
-	if (socket == NULL) {
+	if (!socket) {
 		IPCLOG(@"Fail to create socket server");
 		return 0;
 	}
@@ -826,7 +787,6 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 - (void)_createPairWithAppSocket:(CFSocketNativeHandle)handle {
-
 	IPCLOG(@"Creating pair with incoming socket connection from app");
 
 	// setup pair and streams for incoming conneciton
@@ -835,7 +795,7 @@ static OBJCIPC *sharedInstance = nil;
 
 	CFStreamCreatePairWithSocket(kCFAllocatorDefault, handle, &readStream, &writeStream);
 
-	if (readStream == NULL || writeStream == NULL) {
+	if (!readStream || !writeStream) {
 		IPCLOG(@"Unable to create read and write streams");
 		return;
 	}
@@ -854,7 +814,6 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 - (void)_connectToSpringBoard {
-
 	IPCLOG(@"Connecting to SpringBoard server at port %u", (unsigned int)_serverPort);
 
 	// setup a new connection to socket server in SpringBoard
@@ -862,7 +821,7 @@ static OBJCIPC *sharedInstance = nil;
 	CFWriteStreamRef writeStream = NULL;
 	CFStreamCreatePairWithSocketToHost(NULL, CFSTR("127.0.0.1"), _serverPort, &readStream, &writeStream);
 
-	if (readStream == NULL || writeStream == NULL) {
+	if (!readStream || !writeStream) {
 		IPCLOG(@"Unable to create read and write streams");
 		return;
 	}
@@ -889,7 +848,7 @@ static OBJCIPC *sharedInstance = nil;
 	// so normally the notification could activate OBJCIPC in the app immediately
 	NSDistributedNotificationCenter *center = [NSDistributedNotificationCenter defaultCenter];
 	NSString *object = [[NSBundle mainBundle] bundleIdentifier];
-	if (object != nil) {
+	if (object) {
 		[center addObserver:self selector:@selector(_appActivationHandler) name:OBJCIPCActivateAppNotification object:object suspensionBehavior:NSNotificationSuspensionBehaviorCoalesce];
 	}
 }
@@ -899,29 +858,31 @@ static OBJCIPC *sharedInstance = nil;
 	// so normally the notification could activate OBJCIPC in the app immediately
 	NSDistributedNotificationCenter *center = [NSDistributedNotificationCenter defaultCenter];
 	NSString *object = [[NSBundle mainBundle] bundleIdentifier];
-	if (object != nil) {
+	if (object) {
 		[center addObserver:self selector:@selector(_appDeactivationHandler) name:OBJCIPCDeactivateAppNotification object:object suspensionBehavior:NSNotificationSuspensionBehaviorDrop];
 	}
 }
 
 + (void)_sendActivationNotificationToAppWithIdentifier:(NSString *)identifier {
-	if (identifier != nil) {
-		// Send an activation notification to the app with specified bundle identifier
-		// When the app receives it, it will automatically make a connection with
-		// SpringBoard server and initiate the bidirectional communication
-		NSDistributedNotificationCenter *center = [NSDistributedNotificationCenter defaultCenter];
-		[center postNotificationName:OBJCIPCActivateAppNotification object:identifier userInfo:nil deliverImmediately:YES];
+	if (!identifier) {
+		return;
 	}
+	// Send an activation notification to the app with specified bundle identifier
+	// When the app receives it, it will automatically make a connection with
+	// SpringBoard server and initiate the bidirectional communication
+	NSDistributedNotificationCenter *center = [NSDistributedNotificationCenter defaultCenter];
+	[center postNotificationName:OBJCIPCActivateAppNotification object:identifier userInfo:nil deliverImmediately:YES];
 }
 
 + (void)_sendDeactivationNotificationToAppWithIdentifier:(NSString *)identifier {
-	if (identifier != nil) {
-		// Send an deactivation notification to the app with specified bundle identifier
-		// When the app receives it, it will automatically disconnect with
-		// SpringBoard server and clean up everything about the connection
-		NSDistributedNotificationCenter *center = [NSDistributedNotificationCenter defaultCenter];
-		[center postNotificationName:OBJCIPCDeactivateAppNotification object:identifier userInfo:nil deliverImmediately:YES];
+	if (!identifier) {
+		return;
 	}
+	// Send an deactivation notification to the app with specified bundle identifier
+	// When the app receives it, it will automatically disconnect with
+	// SpringBoard server and clean up everything about the connection
+	NSDistributedNotificationCenter *center = [NSDistributedNotificationCenter defaultCenter];
+	[center postNotificationName:OBJCIPCDeactivateAppNotification object:identifier userInfo:nil deliverImmediately:YES];
 }
 
 + (void)_appActivationHandler {
@@ -931,9 +892,10 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 + (void)_appDeactivationHandler {
-	if ([self isApp]) {
-		[self deactivate];
+	if (![self isApp]) {
+		return;
 	}
+	[self deactivate];
 }
 
 - (void)_deactivateApp {
@@ -943,10 +905,21 @@ static OBJCIPC *sharedInstance = nil;
 
 //////////////////////////////////////////////////////////////////////
 
-- (id)copyWithZone:(NSZone *)zone { return self; }
-- (id)retain { return self; }
+- (id)copyWithZone:(NSZone *)zone {
+	return self;
+}
+
+- (id)retain {
+	return self;
+}
+
 - (oneway void)release {}
-- (id)autorelease { return self; }
-- (NSUInteger)retainCount { return NSUIntegerMax; }
+- (id)autorelease {
+	return self;
+}
+
+- (NSUInteger)retainCount {
+	return NSUIntegerMax;
+}
 
 @end

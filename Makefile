@@ -1,17 +1,15 @@
-ARCHS = armv7 arm64
-CFLAGS = -fvisibility=default -fvisibility-inlines-hidden -fno-objc-arc -O2
-TARGET = iphone:9.2
+export TARGET = iphone:9.3
 
-#DEBUG=1
+CFLAGS = -fvisibility=default -fvisibility-inlines-hidden -fno-objc-arc
+
+INSTALL_TARGET_PROCESSES = SpringBoard
+
+include $(THEOS)/makefiles/common.mk
 
 LIBRARY_NAME = libobjcipc
-libobjcipc_FILES = $(wildcard *.m)
+libobjcipc_FILES = $(wildcard *.x) $(wildcard *.m)
 libobjcipc_FRAMEWORKS = CoreFoundation Foundation UIKit
 libobjcipc_INSTALL_PATH = /usr/lib/
 libobjcipc_LIBRARIES = substrate
 
-include theos/makefiles/common.mk
 include $(THEOS_MAKE_PATH)/library.mk
-
-after-install::
-	install.exec "killall -9 SpringBoard"

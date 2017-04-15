@@ -9,20 +9,19 @@
 #import "header.h"
 
 @interface OBJCIPCConnection : NSObject<NSStreamDelegate> {
-	
 	BOOL _closedConnection;
 	BOOL _handshakeFinished;
 	NSString *_appIdentifier;
 	NSUInteger _nextMessageIdentifier;
-	
+
 	// auto disconnect
 	NSUInteger _autoDisconnectTimerTicks;
 	NSTimer *_autoDisconnectTimer;
-	
+
 	// socket streams
 	NSInputStream *_inputStream;
 	NSOutputStream *_outputStream;
-	
+
 	// header
 	BOOL _receivedHeader;
 	int _receivedHeaderLength;
@@ -31,18 +30,18 @@
 	NSString *_messageIdentifier;
 	NSString *_messageName;
 	NSMutableData *_receivedHeaderData;
-	
+
 	// content
 	int _contentLength;
 	int _receivedContentLength;
 	NSMutableData *_receivedContentData;
-	
+
 	// temporary storage of outgoing message data
 	NSMutableData *_outgoingMessageData;
-	
+
 	// pending incoming messages (received earlier than handshake)
 	NSMutableArray *_pendingIncomingMessages;
-	
+
 	// incoming message handler
 	NSMutableDictionary *_incomingMessageHandlers;
 	NSMutableDictionary *_replyHandlers;
