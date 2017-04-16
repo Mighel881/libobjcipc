@@ -1,5 +1,5 @@
 # libobjcipc
-An inter-process communication (between app and SpringBoard) solution for jailbroken iOS. Specifically written for iOS 7 (not tested on previous versions).
+An inter-process communication (between app and SpringBoard) solution for jailbroken iOS. Specifically written for iOS 7 (not tested on previous versions). Modified by me to work on iOS 8-10.
 
 It handles the socket connections between SpringBoard and app processes, the automatic set up of process assertions and the auto disconnection after timeout or the process terminates.
 
@@ -16,7 +16,7 @@ The basic usage of the library is to have an extra MobileSubstrate extension whi
 [OBJCIPC sendMessageToAppWithIdentifier:@"com.apple.mobiletimer" messageName:@"Custom.Message.Name" dictionary:@{ @"key": @"value" } replyHandler:^(NSDictionary *response) {
 	NSLog(@"Received reply from MobileTimer: %@", response);
 }];
-   
+
 // Asynchronous message sent from app to SpringBoard
 [OBJCIPC sendMessageToSpringBoardWithMessageName:@"Custom.Message.Name" dictionary:@{ @"key": @"value" } replyHandler:^(NSDictionary *response) {
 	NSLog(@"Received reply from SpringBoard: %@", response);

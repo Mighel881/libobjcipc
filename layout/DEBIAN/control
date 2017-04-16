@@ -3,7 +3,7 @@ Name: libobjcipc
 Depends: firmware (>= 7.0), mobilesubstrate
 Version: 1.0.2
 Architecture: iphoneos-arm
-Description: Allow interprocess communication between SpringBoard and Apps
+Description: An inter-process communication (between app and SpringBoard) solution for jailbroken iOS
 Maintainer: Alan Yip
 Author: Alan Yip
 Section: Tweaks
