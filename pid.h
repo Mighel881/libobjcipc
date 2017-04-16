@@ -2,6 +2,7 @@
 #include <sys/sysctl.h>
 #include <pwd.h>
 
+//pretty sure this is useless now
 static inline int pidForProcess(NSString *name) {
     // Thanks to http://stackoverflow.com/questions/6610705/how-to-get-process-id-in-iphone-or-ipad
     // Faster than ps,grep,etc

@@ -153,7 +153,9 @@ static OBJCIPC *sharedInstance = nil;
 
 + (void)activate {
 	OBJCIPC *ipc = [self sharedInstance];
-	if (ipc.activated) return; // only activate once
+	if (ipc.activated) {
+		return; // only activate once
+	}
 
 	IPCLOG(@"Activating OBJCIPC");
 
@@ -267,7 +269,6 @@ static OBJCIPC *sharedInstance = nil;
 	}
 
 	if (![application isRunning]) {
-
 		__block BOOL launchSuccess;
 		dispatch_block_t block = ^{
 			launchSuccess = [app launchApplicationWithIdentifier:identifier suspended:YES];
@@ -328,7 +329,6 @@ static OBJCIPC *sharedInstance = nil;
 
 		// create a new process assertion
 		BKSProcessAssertion *processAssertion = [[%c(BKSProcessAssertion) alloc] initWithBundleIdentifier:identifier flags:flags reason:BKSProcessAssertionReasonBackgroundUI name:identifier withHandler:^(BOOL valid) {
-
 			if (!valid) {
 				// unable to create process assertion
 				// one of the reasons is that the app with specified bundle identifier does not exist
@@ -619,7 +619,6 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 - (void)notifyConnectionBecomesActive:(OBJCIPCConnection *)connection {
-
 	NSString *appIdentifier = connection.appIdentifier;
 	if (!appIdentifier) {
 		IPCLOG(@"App identifier cannot be nil");
@@ -835,7 +834,7 @@ static OBJCIPC *sharedInstance = nil;
 	// Before this notification is sent, a process assertion will be applied to the app
 	// so normally the notification could activate OBJCIPC in the app immediately
 	NSDistributedNotificationCenter *center = [NSDistributedNotificationCenter defaultCenter];
-	NSString *object = [[NSBundle mainBundle] bundleIdentifier];
+	NSString *object = [NSBundle mainBundle].bundleIdentifier;
 	if (object) {
 		[center addObserver:self selector:@selector(_appActivationHandler) name:OBJCIPCActivateAppNotification object:object suspensionBehavior:NSNotificationSuspensionBehaviorCoalesce];
 	}
@@ -845,7 +844,7 @@ static OBJCIPC *sharedInstance = nil;
 	// Before this notification is sent, a process assertion will be applied to the app
 	// so normally the notification could activate OBJCIPC in the app immediately
 	NSDistributedNotificationCenter *center = [NSDistributedNotificationCenter defaultCenter];
-	NSString *object = [[NSBundle mainBundle] bundleIdentifier];
+	NSString *object = [NSBundle mainBundle].bundleIdentifier;
 	if (object) {
 		[center addObserver:self selector:@selector(_appDeactivationHandler) name:OBJCIPCDeactivateAppNotification object:object suspensionBehavior:NSNotificationSuspensionBehaviorDrop];
 	}
@@ -874,9 +873,10 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 + (void)_appActivationHandler {
-	if ([self isApp]) {
-		[self activate];
+	if (![self isApp]) {
+		return;
 	}
+	[self activate];
 }
 
 + (void)_appDeactivationHandler {
@@ -902,6 +902,7 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 - (oneway void)release {}
+
 - (id)autorelease {
 	return self;
 }

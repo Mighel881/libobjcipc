@@ -234,7 +234,6 @@ static char pendingIncomingMessageIdentifierKey;
 }
 
 - (NSDictionary *)_handshakeWithApp:(NSDictionary *)dict {
-
 	if (_closedConnection) {
 		return nil;
 	}
@@ -413,7 +412,6 @@ static char pendingIncomingMessageIdentifierKey;
 }
 
 - (void)_dispatchReceivedMessage {
-
 	if (_closedConnection) {
 		return;
 	}
@@ -446,7 +444,6 @@ static char pendingIncomingMessageIdentifierKey;
 	[self retain]; // to prevent self from being released during callback (e.g. deactivateApp)
 
 	if (isHandshake) {
-
 		#if LOG_MESSAGE_BODY
 			IPCLOG(@"<Connection> Handling incoming handshake message <%@>", dictionary);
 		#else
@@ -464,9 +461,7 @@ static char pendingIncomingMessageIdentifierKey;
 		} else {
 			[self _handshakeWithSpringBoardComplete:dictionary];
 		}
-
 	} else if (isReply) {
-
 		#if LOG_MESSAGE_BODY
 			IPCLOG(@"<Connection> Handling reply message <%@>", dictionary);
 		#else
@@ -488,7 +483,6 @@ static char pendingIncomingMessageIdentifierKey;
 		}
 
 	} else {
-
 		#if LOG_MESSAGE_BODY
 			IPCLOG(@"<Connection> Handling incoming message <%@>", dictionary);
 		#else

@@ -13,3 +13,13 @@ libobjcipc_INSTALL_PATH = /usr/lib/
 libobjcipc_LIBRARIES = substrate
 
 include $(THEOS_MAKE_PATH)/library.mk
+
+after-libobjcipc-stage::
+	@# create directory
+	$(ECHO_NOTHING)mkdir -p $(THEOS_STAGING_DIR)/Library/MobileSubstrate/DynamicLibraries$(ECHO_END)
+
+	@# Create Link
+	$(ECHO_NOTHING)ln -s /usr/lib/libobjcipc.dylib $(THEOS_STAGING_DIR)/Library/MobileSubstrate/DynamicLibraries/libobjcipc.dylib$(ECHO_END)
+
+	@# move Filter Plist
+	$(ECHO_NOTHING)cp libobjcipc.plist $(THEOS_STAGING_DIR)/Library/MobileSubstrate/DynamicLibraries$(ECHO_END)
