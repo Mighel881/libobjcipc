@@ -83,7 +83,7 @@ static OBJCIPC *sharedInstance = nil;
 		// replace the function
 		void *XPCConnectionHasEntitlement = MSFindSymbol(NULL, "_XPCConnectionHasEntitlement");
 		%init(iOS7);
-	} else if ([self isSpringBoard]) {
+	} else if (IN_SPRINGBOARD) {
 		// activate OBJCIPC automatically in SpringBoard
 		[self activate];
 	} else if ([self isApp]) {
@@ -111,10 +111,6 @@ static OBJCIPC *sharedInstance = nil;
 	return result;
 }
 
-+ (BOOL)isSpringBoard {
-	return IN_SPRINGBOARD;
-}
-
 + (BOOL)isBackBoard {
 	static BOOL queried = NO;
 	static BOOL result = NO;
@@ -128,7 +124,7 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 + (BOOL)isApp {
-	return ![self isSpringBoard] && ![self isBackBoard] && [NSBundle mainBundle].bundleIdentifier;
+	return !IN_SPRINGBOARD && ![self isBackBoard] && [NSBundle mainBundle].bundleIdentifier;
 }
 
 + (instancetype)sharedInstance {
@@ -159,7 +155,7 @@ static OBJCIPC *sharedInstance = nil;
 
 	IPCLOG(@"Activating OBJCIPC");
 
-	if ([self isSpringBoard]) {
+	if (IN_SPRINGBOARD) {
 		// create socket server in SpringBoard
 		ipc.serverPort = [ipc _createSocketServer];
 
@@ -240,7 +236,7 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 + (BOOL)launchAppWithIdentifier:(NSString *)identifier stayInBackground:(BOOL)stayInBackground {
-	if (![self isSpringBoard]) {
+	if (!IN_SPRINGBOARD) {
 		IPCLOG(@"You can only launch app in SpringBoard");
 		return NO;
 	}
@@ -289,13 +285,15 @@ static OBJCIPC *sharedInstance = nil;
 
 	// make it stay in background
 	BOOL assertionSuccess = [self setAppWithIdentifier:identifier inBackground:stayInBackground];
-	if (!assertionSuccess) return NO;
+	if (!assertionSuccess) {
+		return NO;
+	}
 
 	return YES;
 }
 
 + (BOOL)setAppWithIdentifier:(NSString *)identifier inBackground:(BOOL)inBackground {
-	if (![self isSpringBoard]) {
+	if (!IN_SPRINGBOARD) {
 		IPCLOG(@"You can only set app in background in SpringBoard");
 		return NO;
 	}
@@ -401,7 +399,7 @@ static OBJCIPC *sharedInstance = nil;
 		return NO;
 	}
 
-	if (![self isSpringBoard] && ![identifier isEqualToString:SpringBoardIdentifier]) {
+	if (!IN_SPRINGBOARD) {
 		IPCLOG(@"You must send messages to app <%@> in SpringBoard", identifier);
 		return NO;
 	}
@@ -416,11 +414,13 @@ static OBJCIPC *sharedInstance = nil;
 		return NO;
 	}
 
-	if ([self isSpringBoard]) {
+	if (IN_SPRINGBOARD) {
 		// launch the app if needed
 		// and make sure the app stay in background
 		BOOL success = [self launchAppWithIdentifier:identifier stayInBackground:YES];
-		if (!success) return NO;
+		if (!success) {
+			return NO;
+		}
 
 		// send an activation notification to the app
 		// this is for the situation that the app closed the connection manually with SpringBoard server
@@ -669,7 +669,7 @@ static OBJCIPC *sharedInstance = nil;
 	IPCLOG(@"Connection is closed <%@>", connection);
 
 	NSString *appIdentifier = connection.appIdentifier;
-	if (appIdentifier && [self.class isSpringBoard]) {
+	if (appIdentifier && IN_SPRINGBOARD) {
 		// remove the app from background
 		// this will also call removeConnection
 		[self.class setAppWithIdentifier:appIdentifier inBackground:NO];
@@ -728,7 +728,7 @@ static OBJCIPC *sharedInstance = nil;
 }
 
 - (NSUInteger)_createSocketServer {
-	if (![self.class isSpringBoard]) {
+	if (!IN_SPRINGBOARD) {
 		IPCLOG(@"Socket server can only be created in SpringBoard");
 		return 0;
 	}

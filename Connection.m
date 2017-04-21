@@ -451,7 +451,7 @@ static char pendingIncomingMessageIdentifierKey;
 		#endif
 
 		// pass to internal handler
-		if ([OBJCIPC isSpringBoard]) {
+		if (IN_SPRINGBOARD) {
 			NSDictionary *reply = [self _handshakeWithApp:dictionary];
 			if (reply) {
 				// send a handshake completion message to app

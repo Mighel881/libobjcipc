@@ -9,8 +9,8 @@ include $(THEOS)/makefiles/common.mk
 LIBRARY_NAME = libobjcipc
 libobjcipc_FILES = $(wildcard *.x) $(wildcard *.m)
 libobjcipc_FRAMEWORKS = CoreFoundation Foundation UIKit
+libobjcipc_EXTRA_FRAMEWORKS = CydiaSubstrate
 libobjcipc_INSTALL_PATH = /usr/lib/
-libobjcipc_LIBRARIES = substrate
 
 include $(THEOS_MAKE_PATH)/library.mk
 
