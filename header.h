@@ -7,8 +7,6 @@
 	#define IPCLOG(x,...) [NSString stringWithFormat:(x), ##__VA_ARGS__]
 #endif
 
-#define XPCObjects "/System/Library/PrivateFrameworks/XPCObjects.framework/XPCObjects"
-
 static NSString * const PrefPath = @"/var/mobile/Library/Preferences/libobjcipc.plist";
 static NSString * const SpringBoardIdentifier = @"com.apple.springboard";
 static NSString * const OBJCIPCActivateAppNotification = @"OBJCIPCActivateAppNotification";

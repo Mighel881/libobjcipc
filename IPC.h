@@ -37,7 +37,6 @@
 @property(nonatomic, retain) NSMutableDictionary *outgoingMessageQueue;
 
 // process checking methods
-+ (BOOL)isBackBoard;
 + (BOOL)isApp;
 
 // retrieve the shared instance

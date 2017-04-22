@@ -18,7 +18,7 @@
 	message.replyHandler = nil;
 	message.dictionary = (!dictionary ? @{} : dictionary);
 
-	return [message autorelease];
+	return message;
 }
 
 + (instancetype)outgoingMessageWithMessageName:(NSString *)messageName dictionary:(NSDictionary *)dictionary messageIdentifier:(NSString *)messageIdentifier isReply:(BOOL)isReply replyHandler:(OBJCIPCReplyHandler)handler {
@@ -29,7 +29,7 @@
 	message.replyHandler = handler;
 	message.dictionary = (!dictionary ? @{} : dictionary);
 
-	return [message autorelease];
+	return message;
 }
 
 - (NSData *)messageData {
@@ -87,11 +87,10 @@
 }
 
 - (void)dealloc {
-	[_messageIdentifier release], _messageIdentifier = nil;
-	[_replyHandler release], _replyHandler = nil;
-	[_messageName release], _messageName = nil;
-	[_dictionary release], _dictionary = nil;
-	[super dealloc];
+	_messageIdentifier = nil;
+	_replyHandler = nil;
+	_messageName = nil;
+	_dictionary = nil;
 }
 
 @end

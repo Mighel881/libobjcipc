@@ -1,6 +1,6 @@
 export TARGET = iphone:9.3
 
-CFLAGS = -fvisibility=default -fvisibility-inlines-hidden -fno-objc-arc
+CFLAGS = -fvisibility=default -fvisibility-inlines-hidden -fobjc-arc
 
 INSTALL_TARGET_PROCESSES = SpringBoard
 
@@ -12,7 +12,10 @@ libobjcipc_FRAMEWORKS = CoreFoundation Foundation UIKit
 libobjcipc_EXTRA_FRAMEWORKS = CydiaSubstrate
 libobjcipc_INSTALL_PATH = /usr/lib/
 
+SUBPROJECTS = objcipcassertiondhooks objcipcbackboarddhooks
+
 include $(THEOS_MAKE_PATH)/library.mk
+include $(THEOS_MAKE_PATH)/aggregate.mk
 
 after-libobjcipc-stage::
 	@# create directory

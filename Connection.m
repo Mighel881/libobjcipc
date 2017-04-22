@@ -47,8 +47,8 @@ static char pendingIncomingMessageIdentifierKey;
 		[outputStream open];
 
 		// keep references
-		_inputStream = [inputStream retain];
-		_outputStream = [outputStream retain];
+		_inputStream = inputStream;
+		_outputStream = outputStream;
 	}
 
 	return self;
@@ -123,8 +123,8 @@ static char pendingIncomingMessageIdentifierKey;
 	[_outputStream close];
 
 	// release streams
-	[_inputStream release], _inputStream = nil;
-	[_outputStream release], _outputStream = nil;
+	_inputStream = nil;
+	_outputStream = nil;
 
 	// reply nil messages to all reply listener
 	if (_replyHandlers && [_replyHandlers count] > 0) {
@@ -138,10 +138,10 @@ static char pendingIncomingMessageIdentifierKey;
 		}
 	}
 
-	[_replyHandlers release], _replyHandlers = nil;
-	[_outgoingMessageData release], _outgoingMessageData = nil;
-	[_incomingMessageHandlers release], _incomingMessageHandlers = nil;
-	[_pendingIncomingMessages release], _pendingIncomingMessages = nil;
+	_replyHandlers = nil;
+	_outgoingMessageData = nil;
+	_incomingMessageHandlers = nil;
+	_pendingIncomingMessages = nil;
 
 	// notify the main instance
 	[[OBJCIPC sharedInstance] notifyConnectionIsClosed:self];
@@ -221,7 +221,7 @@ static char pendingIncomingMessageIdentifierKey;
 			[self _dispatchIncomingMessage:dictionary];
 		}
 
-		[_pendingIncomingMessages release], _pendingIncomingMessages = nil;
+		_pendingIncomingMessages = nil;
 
 		// setup auto-disconnect timer
 		[self _createAutoDisconnectTimer];
@@ -315,10 +315,10 @@ static char pendingIncomingMessageIdentifierKey;
 			BOOL isReply = header.replyFlag;
 
 			// message name
-			NSString *messageName = [[[NSString alloc] initWithCString:header.messageName encoding:NSASCIIStringEncoding] autorelease];
+			NSString *messageName = [[NSString alloc] initWithCString:header.messageName encoding:NSASCIIStringEncoding];
 
 			// message identifier
-			NSString *messageIdentifier = [[[NSString alloc] initWithCString:header.messageIdentifier encoding:NSASCIIStringEncoding] autorelease];
+			NSString *messageIdentifier = [[NSString alloc] initWithCString:header.messageIdentifier encoding:NSASCIIStringEncoding];
 
 			BOOL isHandshake = NO;
 			if ([messageIdentifier isEqualToString:@"00HS"]) { // fixed
@@ -336,7 +336,7 @@ static char pendingIncomingMessageIdentifierKey;
 			_isReply = isReply;
 			_messageName = [messageName copy];
 			_messageIdentifier = [messageIdentifier copy];
-			[_receivedHeaderData release], _receivedHeaderData = nil;
+			_receivedHeaderData = nil;
 
 			// content
 			_contentLength = contentLength;
@@ -401,11 +401,10 @@ static char pendingIncomingMessageIdentifierKey;
 				NSRange range = NSMakeRange(writtenLen, length - writtenLen);
 				NSMutableData *trimmedData = [[_outgoingMessageData subdataWithRange:range] mutableCopy];
 				// update buffered outgoing message data
-				[_outgoingMessageData release];
 				_outgoingMessageData = trimmedData;
 			} else {
 				// finish writing buffer
-				[_outgoingMessageData release], _outgoingMessageData = nil;
+				_outgoingMessageData = nil;
 			}
 		}
 	}
@@ -440,8 +439,6 @@ static char pendingIncomingMessageIdentifierKey;
 
 	// convert the data back to NSDictionary
 	NSDictionary *dictionary = (NSDictionary *)[NSKeyedUnarchiver unarchiveObjectWithData:data];
-
-	[self retain]; // to prevent self from being released during callback (e.g. deactivateApp)
 
 	if (isHandshake) {
 		#if LOG_MESSAGE_BODY
@@ -508,7 +505,6 @@ static char pendingIncomingMessageIdentifierKey;
 	}
 
 	[self _resetReceivingMessageState];
-	[self release];
 }
 
 - (void)_dispatchIncomingMessage:(NSDictionary *)dictionary {
@@ -546,14 +542,14 @@ static char pendingIncomingMessageIdentifierKey;
 	_receivedHeaderLength = 0;
 	_isHandshake = NO;
 	_isReply = NO;
-	[_messageName release], _messageName = nil;
-	[_messageIdentifier release], _messageIdentifier = nil;
-	[_receivedHeaderData release], _receivedHeaderData = nil;
+	_messageName = nil;
+	_messageIdentifier = nil;
+	_receivedHeaderData = nil;
 
 	// content
 	_contentLength = 0;
 	_receivedContentLength = 0;
-	[_receivedContentData release], _receivedContentData = nil;
+	_receivedContentData = nil;
 }
 
 - (void)_createAutoDisconnectTimer {
@@ -561,7 +557,7 @@ static char pendingIncomingMessageIdentifierKey;
 		return;
 	}
 	// ticks every minute
-	_autoDisconnectTimer = [[NSTimer scheduledTimerWithTimeInterval:OBJCIPC_AUTODISCONNECT_TICKTIME target:self selector:@selector(_autoDisconnectTimerTicks) userInfo:nil repeats:YES] retain];
+	_autoDisconnectTimer = [NSTimer scheduledTimerWithTimeInterval:OBJCIPC_AUTODISCONNECT_TICKTIME target:self selector:@selector(_autoDisconnectTimerTicks) userInfo:nil repeats:YES];
 }
 
 - (void)_autoDisconnectTimerTicks {
@@ -591,7 +587,6 @@ static char pendingIncomingMessageIdentifierKey;
 		return;
 	}
 	[_autoDisconnectTimer invalidate];
-	[_autoDisconnectTimer release];
 	_autoDisconnectTimer = nil;
 	IPCLOG(@"<Connection> Auto disconnect timer is invalidated");
 }
@@ -640,9 +635,7 @@ static char pendingIncomingMessageIdentifierKey;
 
 	// this is for OBJCIPC to identify this connection
 	// so release it only when the connection gets released
-	[_appIdentifier release], _appIdentifier = nil;
-
-	[super dealloc];
+	_appIdentifier = nil;
 }
 
 @end

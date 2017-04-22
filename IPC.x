@@ -19,37 +19,6 @@
 #import "Connection.h"
 #import "Message.h"
 
-%group iOS7
-%hookf(int, XPCConnectionHasEntitlement, id connection, NSString *entitlement) {
-	// to enable process assertions in SpringBoard
-	if ([entitlement isEqualToString:@"com.apple.multitasking.unlimitedassertions"]) {
-		return true;
-	}
-
-	return %orig;
-}
-%end
-
-%group iOS8
-%hookf(int, BSAuditTokenTaskHasEntitlement, id connection, NSString *entitlement) {
-	if ([entitlement isEqualToString:@"com.apple.multitasking.unlimitedassertions"]) {
-		return true;
-	}
-
-	return %orig;
-}
-%end
-
-%group iOS9andUp
-%hookf(int, BSXPCConnectionHasEntitlement, id connection, NSString *entitlement) {
-	if ([entitlement isEqualToString:@"com.apple.multitasking.unlimitedassertions"]) {
-		return true;
-	}
-
-	return %orig;
-}
-%end
-
 static inline void socketServerCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef address, const void *data, void *info) {
 	if (type != kCFSocketAcceptCallBack) {
 		return;
@@ -66,24 +35,7 @@ static OBJCIPC *sharedInstance = nil;
 @implementation OBJCIPC
 
 + (void)load {
-	//TODO: maybe split hooks into separate projects
-	if ([self isAssertiond]) {
-		// replace the function. testing if is iOS 8 by checking if it responds to iOS 8-only method
-		if (IS_IOS_OR_NEWER(iOS_9_0)) {
-			void *BSXPCConnectionHasEntitlement = MSFindSymbol(NULL, "_BSXPCConnectionHasEntitlement");
-			%init(iOS9andUp);
-		} else {
-			void *BSAuditTokenTaskHasEntitlement = MSFindSymbol(NULL, "_BSAuditTokenTaskHasEntitlement");
-			%init(iOS8);
-		}
-	} else if ([self isBackBoard]) {
-
-		// load the library
-		dlopen(XPCObjects, RTLD_LAZY);
-		// replace the function
-		void *XPCConnectionHasEntitlement = MSFindSymbol(NULL, "_XPCConnectionHasEntitlement");
-		%init(iOS7);
-	} else if (IN_SPRINGBOARD) {
+	if (IN_SPRINGBOARD) {
 		// activate OBJCIPC automatically in SpringBoard
 		[self activate];
 	} else if ([self isApp]) {
@@ -99,32 +51,15 @@ static OBJCIPC *sharedInstance = nil;
 	}
 }
 
-+ (BOOL)isAssertiond {
-	static BOOL queried = NO;
-	static BOOL result = NO;
-
-	if (!queried) {
-		queried = YES;
-		result = [[NSProcessInfo processInfo].processName isEqualToString:@"assertiond"];
-	}
-
-	return result;
-}
-
-+ (BOOL)isBackBoard {
-	static BOOL queried = NO;
-	static BOOL result = NO;
-
-	if (!queried) {
-		queried = YES;
-		result = [[NSBundle mainBundle].bundleIdentifier isEqualToString:@"com.apple.backboardd"];
-	}
-
-	return result;
-}
-
 + (BOOL)isApp {
-	return !IN_SPRINGBOARD && ![self isBackBoard] && [NSBundle mainBundle].bundleIdentifier;
+	return [NSBundle.mainBundle.executablePath hasPrefix:@"/Applications"] ||
+			[NSBundle.mainBundle.executablePath hasPrefix:@"/var/stash/appsstash"] ||
+			[NSBundle.mainBundle.executablePath hasPrefix:@"/var/containers/Bundle/Application"] ||
+			[NSBundle.mainBundle.executablePath hasPrefix:@"/private/var/db/stash"] ||
+			[NSBundle.mainBundle.executablePath hasPrefix:@"/var/mobile/Applications"] ||
+			[NSBundle.mainBundle.executablePath hasPrefix:@"/private/var/mobile/Applications"] ||
+			[NSBundle.mainBundle.executablePath hasPrefix:@"/var/mobile/Containers/Bundle/Application"] ||
+			[NSBundle.mainBundle.executablePath hasPrefix:@"/private/var/mobile/Containers/Bundle/Application"];
 }
 
 + (instancetype)sharedInstance {
@@ -361,7 +296,6 @@ static OBJCIPC *sharedInstance = nil;
 			}
 		}];
 		processAssertions[identifier] = processAssertion;
-		[processAssertion release];
 
 		IPCLOG(@"objcipc: Created process assertion: %@", processAssertion);
 
@@ -385,7 +319,6 @@ static OBJCIPC *sharedInstance = nil;
 			[processAssertions removeObjectForKey:appIdentifier];
 		}
 
-		[appIdentifier release];
 	}
 
 	return YES;
@@ -472,7 +405,7 @@ static OBJCIPC *sharedInstance = nil;
 		CFRunLoopRunInMode(kCFRunLoopDefaultMode, 1.0, YES); // 1000 ms
 	}
 
-	return [reply autorelease];
+	return reply;
 }
 
 + (NSDictionary *)sendMessageToSpringBoardWithMessageName:(NSString *)messageName dictionary:(NSDictionary *)dictionary {
@@ -519,7 +452,7 @@ static OBJCIPC *sharedInstance = nil;
 	NSMutableDictionary *globalIncomingMessageHandlers = ipc.globalIncomingMessageHandlers;
 
 	// copy the handler block
-	handler = [[handler copy] autorelease];
+	handler = [handler copy];
 
 	// save the handler
 	if (!identifier) {
@@ -789,15 +722,14 @@ static OBJCIPC *sharedInstance = nil;
 
 	IPCLOG(@"Created pair with incoming socket connection");
 
-	NSInputStream *inputStream = (NSInputStream *)readStream;
-	NSOutputStream *outputStream = (NSOutputStream *)writeStream;
+	NSInputStream *inputStream = (__bridge NSInputStream *)readStream;
+	NSOutputStream *outputStream = (__bridge NSOutputStream *)writeStream;
 
 	// create a new connection instance with the connected socket streams
 	OBJCIPCConnection *connection = [[OBJCIPCConnection alloc] initWithInputStream:inputStream outputStream:outputStream];
 
 	// it will become active after handshake with SpringBoard
 	[self addPendingConnection:connection];
-	[connection release];
 }
 
 - (void)_connectToSpringBoard {
@@ -815,8 +747,8 @@ static OBJCIPC *sharedInstance = nil;
 
 	IPCLOG(@"Connected to SpringBoard server");
 
-	NSInputStream *inputStream = (NSInputStream *)readStream;
-	NSOutputStream *outputStream = (NSOutputStream *)writeStream;
+	NSInputStream *inputStream = (__bridge NSInputStream *)readStream;
+	NSOutputStream *outputStream = (__bridge NSOutputStream *)writeStream;
 
 	// create a new connection with SpringBoard
 	OBJCIPCConnection *connection = [[OBJCIPCConnection alloc] initWithInputStream:inputStream outputStream:outputStream];
@@ -824,7 +756,6 @@ static OBJCIPC *sharedInstance = nil;
 
 	// it will become active after handshake with SpringBoard
 	[self addPendingConnection:connection];
-	[connection release];
 
 	// ask the connection to do handshake with SpringBoard
 	[connection _handshakeWithSpringBoard];
@@ -895,20 +826,6 @@ static OBJCIPC *sharedInstance = nil;
 
 - (id)copyWithZone:(NSZone *)zone {
 	return self;
-}
-
-- (id)retain {
-	return self;
-}
-
-- (oneway void)release {}
-
-- (id)autorelease {
-	return self;
-}
-
-- (NSUInteger)retainCount {
-	return NSUIntegerMax;
 }
 
 @end
