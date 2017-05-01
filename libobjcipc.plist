@@ -1,12 +1,1 @@
-{
- 	Filter = {
- 		Bundles = (
- 			"com.apple.UIKit"
- 		);
- 		Executables = (
- 			"backboardd",
- 			"assertiond"
- 		);
- 		Mode = Any;
- 	};
- }
+{ Filter = { Bundles = ( "com.apple.UIKit" ); }; }

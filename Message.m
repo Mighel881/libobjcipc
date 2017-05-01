@@ -33,7 +33,6 @@
 }
 
 - (NSData *)messageData {
-
 	if (!_messageName) {
 		_messageName = @"";
 	}
